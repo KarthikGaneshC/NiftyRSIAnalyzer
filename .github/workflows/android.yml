@@ -23,64 +23,53 @@ jobs:
               libtinfo6 libffi-dev libssl-dev \
               build-essential python3-dev
 
-      - name: Install Buildozer and dependencies
+      - name: Install Buildozer with explicit p4a
         run: |
           python -m pip install --upgrade pip wheel
           pip install cython==0.29.33
           pip install buildozer
-          pip install python-for-android
+          pip install --force-reinstall git+https://github.com/kivy/python-for-android.git@develop
+          mkdir -p ~/.buildozer/android/platform/python-for-android
 
-      - name: Set up Android SDK (Fixed Version)
+      - name: Set up Android SDK
         run: |
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
 
-          # Download specific working version of cmdline-tools
+          # Download working cmdline-tools
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip -d ~/.android/cmdline-tools
           mv ~/.android/cmdline-tools/cmdline-tools ~/.android/cmdline-tools/latest
 
-          # Correct directory structure for SDK
-          mkdir -p ~/.android/cmdline-tools/latest/bin
+          # Set environment variables
           echo "ANDROID_SDK_ROOT=$HOME/.android" >> $GITHUB_ENV
           echo "PATH=$HOME/.android/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
-          # Verify SDK manager works
-          ~/.android/cmdline-tools/latest/bin/sdkmanager --list || echo "SDK Manager test failed"
-
-      - name: Install Android packages (Fixed)
-        run: |
-          yes | ~/.android/cmdline-tools/latest/bin/sdkmanager --licenses
+          # Install Android tools
+          yes | ~/.android/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
           ~/.android/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;30.0.3"
           ~/.android/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
           echo "ANDROID_NDK_HOME=$HOME/.android/ndk/23.1.7779620" >> $GITHUB_ENV
 
-      - name: Configure buildozer.spec
+      - name: Initialize Buildozer
         run: |
-          echo "[app]" > buildozer.spec
-          echo "title = MyApp" >> buildozer.spec
-          echo "package.name = myapp" >> buildozer.spec
-          echo "package.domain = org.test" >> buildozer.spec
-          echo "source.dir = ." >> buildozer.spec
-          echo "version = 0.1" >> buildozer.spec
-          echo "requirements = python3,kivy,cython==0.29.33" >> buildozer.spec
-          echo "android.ndk_path = $ANDROID_NDK_HOME" >> buildozer.spec
-          echo "android.sdk_path = $ANDROID_SDK_ROOT" >> buildozer.spec
-          echo "android.accept_sdk_license = True" >> buildozer.spec
-          echo "p4a.branch = develop" >> buildozer.spec
-          echo "log_level = 2" >> buildozer.spec
+          mkdir -p .buildozer/android/platform/python-for-android
+          if [ ! -f buildozer.spec ]; then
+            buildozer init
+          fi
+          buildozer checkconfig
 
       - name: Build APK
         run: |
           mkdir -p bin
-          buildozer android clean
+          buildozer -v android clean
           buildozer -v android debug 2>&1 | tee build.log
           
           # Verify APK exists
           if [ ! -f bin/*.apk ]; then
             echo "=== Build Log Errors ==="
             grep -i error build.log
-            echo "=== APK Search ==="
+            echo "=== Searching for APK ==="
             find . -name "*.apk" -exec ls -la {} \;
             exit 1
           fi
