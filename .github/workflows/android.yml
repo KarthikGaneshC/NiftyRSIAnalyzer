@@ -16,18 +16,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.11.1
+          python-version: 3.10.1  # Use 3.10 for better compatibility with Kivy
 
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y zip unzip openjdk-17-jdk python3-pip git
+          sudo apt install -y zip unzip openjdk-17-jdk python3-pip git libffi-dev libssl-dev
 
       - name: Set environment paths
         run: |
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+          echo "$HOME/.local/bin" >> $GITHUB_PATH  # Ensures pip-installed tools like buildozer are found
 
       - name: Install Android SDK
         run: |
@@ -43,6 +44,10 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install buildozer cython
+
+      - name: Initialize Buildozer (first-time only)
+        run: |
+          buildozer init || echo "Buildozer already initialized"
 
       - name: Build APK
         run: |
