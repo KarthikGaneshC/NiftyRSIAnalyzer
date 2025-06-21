@@ -39,7 +39,7 @@ jobs:
       - name: Create Buildozer directories
         run: |
           mkdir -p .buildozer/android/platform/python-for-android
-          mkdir -p .buildozer/android/platform/build
+          mkdir -p bin  # Ensure output directory exists
 
       - name: Set up Android SDK/NDK
         run: |
@@ -69,38 +69,41 @@ jobs:
             print "p4a.branch = develop";
             print "requirements = python3,kivy,cython==0.29.33";
             print "log_level = 2";
+            print "android.accept_sdk_license = True";
             added=1
           }' buildozer.spec > temp.spec && mv temp.spec buildozer.spec
 
       - name: Build APK with debug logging
         run: |
-          buildozer android clean
-          buildozer -v android debug 2>&1 | tee build.log
+          # Clean previous builds
+          rm -f bin/*.apk || true
           
-          # Create bin directory if it doesn't exist
-          mkdir -p bin
-          
-          # Find and copy APK to bin directory
-          find .buildozer -name "*.apk" -exec cp {} bin/ \;
+          # Run build with full logging
+          buildozer -v android release 2>&1 | tee build.log
           
           # Verify APK exists
-          if [ -z "$(ls -A bin/*.apk 2>/dev/null)" ]; then
-            echo "::error::No APK file found after build!"
+          if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
+            echo "::error::No APK file found in bin directory!"
+            echo "=== Searching all directories ==="
+            find . -name "*.apk" -exec ls -la {} \; || echo "No APK files found anywhere"
             echo "=== Build Log Errors ==="
             grep -i error build.log
             exit 1
           fi
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: bin/*.apk
+          name: android-app
+          path: |
+            bin/*.apk
+            .buildozer/android/platform/build/dists/*/bin/*.apk
           if-no-files-found: error
+          retention-days: 7
 
-      - name: Show build summary
+      - name: Show build results
         run: |
-          echo "=== APK Build Successful ==="
+          echo "=== Build Summary ==="
           echo "APK file(s) created:"
-          ls -la bin/*.apk
+          find . -name "*.apk" -exec ls -la {} \; || echo "No APK files found"
           echo "Download the APK from the Artifacts section above"
