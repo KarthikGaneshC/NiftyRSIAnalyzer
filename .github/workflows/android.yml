@@ -38,9 +38,12 @@ jobs:
           pip install buildozer cython virtualenv
           pip install python-for-android
 
-      - name: Create required directories
+      - name: Clean existing buildozer.spec duplicates
         run: |
-          mkdir -p .buildozer/android/platform/python-for-android
+          # Backup original spec file
+          cp buildozer.spec buildozer.spec.bak
+          # Remove duplicate [app] sections
+          awk '/^\[app\]/ && !found {found=1; print; next} /^\[app\]/ && found {next} {print}' buildozer.spec.bak > buildozer.spec
 
       - name: Install Android SDK
         run: |
@@ -62,16 +65,15 @@ jobs:
 
       - name: Install Android NDK
         run: |
-          # Download NDK directly
           NDK_VERSION="25b"
           wget https://dl.google.com/android/repository/android-ndk-r${NDK_VERSION}-linux.zip
           unzip android-ndk-r${NDK_VERSION}-linux.zip -d ~/
           mv ~/android-ndk-r${NDK_VERSION} ~/.android/android-ndk
           echo "ANDROID_NDK_HOME=$HOME/.android/android-ndk" >> $GITHUB_ENV
 
-      - name: Update buildozer.spec with NDK path
-        run: |
-          echo "[app]" >> buildozer.spec
+          # Update buildozer.spec with correct paths
+          sed -i "/^android.ndk_path/d" buildozer.spec
+          sed -i "/^android.sdk_path/d" buildozer.spec
           echo "android.ndk_path = $HOME/.android/android-ndk" >> buildozer.spec
           echo "android.sdk_path = $HOME/.android" >> buildozer.spec
 
