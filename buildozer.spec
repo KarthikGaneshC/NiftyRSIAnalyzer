@@ -9,6 +9,16 @@ requirements = python3,kivy,kivymd,yfinance,numpy,pandas
 orientation = portrait
 osx.kivy_version = 2.1.0
 
+# ✅ Add these Android config fields
+android.api = 31
+android.minapi = 21
+android.sdk_path = ~/.buildozer/android/platform/android-sdk
+android.ndk_path = ~/.buildozer/android/platform/android-ndk-r25b
+android.build_tools_version = 31.0.0
+
+# Optional but good for debugging
+android.permissions = INTERNET
+
 [buildozer]
 log_level = 2
 warn_on_root = 1
