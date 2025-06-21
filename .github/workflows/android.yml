@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.10 # Use 3.10 for better compatibility with Kivy
+          python-version: 3.10.18 # Use 3.10 for better compatibility with Kivy
 
       - name: Install dependencies
         run: |
