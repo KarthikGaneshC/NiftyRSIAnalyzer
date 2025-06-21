@@ -8,76 +8,65 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Update package lists
-        run: sudo apt-get update -y
-
-      - name: Install Python
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10.18"
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Install essential packages
+      - name: Install system dependencies
         run: |
+          sudo apt-get update
           sudo apt-get install -y \
-              git zip unzip \
-              libncurses6 libtinfo6 \
-              python3-pip python3-dev \
-              autoconf automake libtool \
-              pkg-config zlib1g-dev \
-              libffi-dev libssl-dev
+              git zip unzip openjdk-17-jdk \
+              python3-pip autoconf libtool \
+              pkg-config zlib1g-dev libncurses6 \
+              libtinfo6 libffi-dev libssl-dev
 
-      - name: Install Buildozer and dependencies
+      - name: Install Buildozer and python-for-android
         run: |
           python -m pip install --upgrade pip
-          pip install buildozer cython virtualenv
-          pip install python-for-android
+          pip install buildozer python-for-android
 
-      - name: Clean existing buildozer.spec duplicates
+      - name: Initialize Buildozer environment
         run: |
-          # Backup original spec file
-          cp buildozer.spec buildozer.spec.bak
-          # Remove duplicate [app] sections
-          awk '/^\[app\]/ && !found {found=1; print; next} /^\[app\]/ && found {next} {print}' buildozer.spec.bak > buildozer.spec
+          # Create required directories
+          mkdir -p .buildozer/android/platform/python-for-android
+          
+          # Initialize if no spec file exists
+          if [ ! -f buildozer.spec ]; then
+            buildozer init
+          fi
 
-      - name: Install Android SDK
+      - name: Install Android SDK and NDK
         run: |
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
 
+          # Install Android Command Line Tools
           wget https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
           unzip cmdline-tools.zip -d ~/.android/cmdline-tools
           mv ~/.android/cmdline-tools/cmdline-tools ~/.android/cmdline-tools/latest
 
+          # Set environment variables
           echo "ANDROID_SDK_ROOT=$HOME/.android" >> $GITHUB_ENV
-          echo "$HOME/.android/cmdline-tools/latest/bin:$HOME/.android/platform-tools" >> $GITHUB_PATH
+          echo "PATH=$HOME/.android/cmdline-tools/latest/bin:$HOME/.android/platform-tools:$PATH" >> $GITHUB_ENV
 
+          # Accept licenses and install components
           yes | ~/.android/cmdline-tools/latest/bin/sdkmanager --licenses
-          ~/.android/cmdline-tools/latest/bin/sdkmanager \
-              "platform-tools" \
-              "platforms;android-34" \
-              "build-tools;34.0.0"
+          ~/.android/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Install Android NDK
+          # Install NDK
+          ~/.android/cmdline-tools/latest/bin/sdkmanager "ndk;25.2.9519653"
+          echo "ANDROID_NDK_HOME=$HOME/.android/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      - name: Configure buildozer.spec
         run: |
-          NDK_VERSION="25b"
-          wget https://dl.google.com/android/repository/android-ndk-r${NDK_VERSION}-linux.zip
-          unzip android-ndk-r${NDK_VERSION}-linux.zip -d ~/
-          mv ~/android-ndk-r${NDK_VERSION} ~/.android/android-ndk
-          echo "ANDROID_NDK_HOME=$HOME/.android/android-ndk" >> $GITHUB_ENV
+          echo "[app]" >> buildozer.spec
+          echo "android.ndk_path = $ANDROID_NDK_HOME" >> buildozer.spec
+          echo "android.sdk_path = $ANDROID_SDK_ROOT" >> buildozer.spec
+          echo "p4a.branch = master" >> buildozer.spec
 
-          # Update buildozer.spec with correct paths
-          sed -i "/^android.ndk_path/d" buildozer.spec
-          sed -i "/^android.sdk_path/d" buildozer.spec
-          echo "android.ndk_path = $HOME/.android/android-ndk" >> buildozer.spec
-          echo "android.sdk_path = $HOME/.android" >> buildozer.spec
-
-      - name: Build APK
+      - name: Run Buildozer
         run: |
           buildozer android clean
           buildozer android debug
