@@ -8,12 +8,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clean buildozer.spec
-        run: |
-          awk '/^\[app\]/ && !found {found=1; print; next} /^\[app\]/ && found {next} {print}' buildozer.spec > temp.spec
-          awk -F= '!seen[$1]++' temp.spec > buildozer.spec
-          rm temp.spec
-
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
@@ -29,81 +23,71 @@ jobs:
               libtinfo6 libffi-dev libssl-dev \
               build-essential python3-dev
 
-      - name: Install Python build tools
+      - name: Install Buildozer and dependencies
         run: |
           python -m pip install --upgrade pip wheel
           pip install cython==0.29.33
           pip install buildozer
-          pip install --force-reinstall git+https://github.com/kivy/python-for-android.git@develop
+          pip install python-for-android
 
-      - name: Create Buildozer directories
-        run: |
-          mkdir -p .buildozer/android/platform/python-for-android
-          mkdir -p bin  # Ensure output directory exists
-
-      - name: Set up Android SDK/NDK
+      - name: Set up Android SDK (Fixed Version)
         run: |
           mkdir -p ~/.android
           touch ~/.android/repositories.cfg
 
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O cmdline-tools.zip
+          # Download specific working version of cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
           unzip -q cmdline-tools.zip -d ~/.android/cmdline-tools
           mv ~/.android/cmdline-tools/cmdline-tools ~/.android/cmdline-tools/latest
 
+          # Correct directory structure for SDK
+          mkdir -p ~/.android/cmdline-tools/latest/bin
           echo "ANDROID_SDK_ROOT=$HOME/.android" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$HOME/.android/ndk/25.2.9519653" >> $GITHUB_ENV
-          echo "PATH=$HOME/.android/cmdline-tools/latest/bin:$HOME/.android/platform-tools:$PATH" >> $GITHUB_ENV
+          echo "PATH=$HOME/.android/cmdline-tools/latest/bin:$PATH" >> $GITHUB_ENV
 
-          yes | ~/.android/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
-          ~/.android/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653"
+          # Verify SDK manager works
+          ~/.android/cmdline-tools/latest/bin/sdkmanager --list || echo "SDK Manager test failed"
+
+      - name: Install Android packages (Fixed)
+        run: |
+          yes | ~/.android/cmdline-tools/latest/bin/sdkmanager --licenses
+          ~/.android/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;30.0.3"
+          ~/.android/cmdline-tools/latest/bin/sdkmanager "ndk;23.1.7779620"
+          echo "ANDROID_NDK_HOME=$HOME/.android/ndk/23.1.7779620" >> $GITHUB_ENV
 
       - name: Configure buildozer.spec
         run: |
-          for setting in android.ndk_path android.sdk_path p4a.branch requirements; do
-            sed -i "/^$setting/d" buildozer.spec
-          done
+          echo "[app]" > buildozer.spec
+          echo "title = MyApp" >> buildozer.spec
+          echo "package.name = myapp" >> buildozer.spec
+          echo "package.domain = org.test" >> buildozer.spec
+          echo "source.dir = ." >> buildozer.spec
+          echo "version = 0.1" >> buildozer.spec
+          echo "requirements = python3,kivy,cython==0.29.33" >> buildozer.spec
+          echo "android.ndk_path = $ANDROID_NDK_HOME" >> buildozer.spec
+          echo "android.sdk_path = $ANDROID_SDK_ROOT" >> buildozer.spec
+          echo "android.accept_sdk_license = True" >> buildozer.spec
+          echo "p4a.branch = develop" >> buildozer.spec
+          echo "log_level = 2" >> buildozer.spec
 
-          awk '1; /^\[app\]/ && !added {
-            print "android.ndk_path = $ANDROID_NDK_HOME";
-            print "android.sdk_path = $ANDROID_SDK_ROOT";
-            print "p4a.branch = develop";
-            print "requirements = python3,kivy,cython==0.29.33";
-            print "log_level = 2";
-            print "android.accept_sdk_license = True";
-            added=1
-          }' buildozer.spec > temp.spec && mv temp.spec buildozer.spec
-
-      - name: Build APK with debug logging
+      - name: Build APK
         run: |
-          # Clean previous builds
-          rm -f bin/*.apk || true
-          
-          # Run build with full logging
-          buildozer -v android release 2>&1 | tee build.log
+          mkdir -p bin
+          buildozer android clean
+          buildozer -v android debug 2>&1 | tee build.log
           
           # Verify APK exists
-          if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
-            echo "::error::No APK file found in bin directory!"
-            echo "=== Searching all directories ==="
-            find . -name "*.apk" -exec ls -la {} \; || echo "No APK files found anywhere"
+          if [ ! -f bin/*.apk ]; then
             echo "=== Build Log Errors ==="
             grep -i error build.log
+            echo "=== APK Search ==="
+            find . -name "*.apk" -exec ls -la {} \;
             exit 1
           fi
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-app
-          path: |
-            bin/*.apk
-            .buildozer/android/platform/build/dists/*/bin/*.apk
+          name: app-release
+          path: bin/*.apk
           if-no-files-found: error
-          retention-days: 7
-
-      - name: Show build results
-        run: |
-          echo "=== Build Summary ==="
-          echo "APK file(s) created:"
-          find . -name "*.apk" -exec ls -la {} \; || echo "No APK files found"
-          echo "Download the APK from the Artifacts section above"
