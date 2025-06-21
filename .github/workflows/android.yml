@@ -96,3 +96,9 @@ jobs:
           buildozer -v android debug 2>&1 | tee build.log
           echo "=== Build Log Summary ==="
           grep -i error build.log || echo "No errors found in build log"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: NiftyRSIAnalyzer-APK
+          path: bin/*.apk
