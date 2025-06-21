@@ -97,8 +97,33 @@ jobs:
           echo "=== Build Log Summary ==="
           grep -i error build.log || echo "No errors found in build log"
 
-      - name: Upload APK Artifact
+       - name: Build APK
+        run: |
+          buildozer android clean
+          buildozer -v android debug 2>&1 | tee build.log
+          
+          # Verify APK was created
+          APK_PATH=$(find . -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::No APK file found!"
+            echo "=== Build Log Errors ==="
+            grep -i error build.log
+            exit 1
+          else
+            echo "APK found at: $APK_PATH"
+          fi
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v3
         with:
-          name: NiftyRSIAnalyzer-APK
-          path: bin/*.apk
+          name: android-apk
+          path: |
+            bin/*.apk
+            .buildozer/android/platform/build/dists/*/bin/*.apk
+          if-no-files-found: error
+
+      - name: Show APK location
+        run: |
+          echo "=== Searching for APK ==="
+          find . -name "*.apk" -exec ls -la {} \;
+          echo "APK should be available as a downloadable artifact above"
