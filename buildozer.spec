@@ -5,7 +5,9 @@ package.domain = org.karthik.nifty
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
 version = 0.1
-requirements = python3,kivy,kivymd,yfinance,numpy,pandas
+requirements = python3,kivy,kivymd,yfinance,numpy,pandas,requests,certifi,urllib3
+
+android.archs = armeabi-v7a, arm64-v8a
 orientation = portrait
 osx.kivy_version = 2.1.0
 
